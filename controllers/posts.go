@@ -17,7 +17,7 @@ type ReturnPost struct {
 }
 
 type PostFromUser struct {
-	Text string `json:"text"`
+	Text string `json:"text" binding:"required"`
 }
 
 type AddPostReturn struct {
@@ -27,8 +27,7 @@ type AddPostReturn struct {
 
 func GetPosts(c *gin.Context) {
 	var posts []ReturnPost
-	tokens, _ := c.Get("tokens")
-	tokensArr := tokens.([]string)
+	tokens := c.GetStringSlice("tokens")
 
 	rows, err := models.DB.Query("SELECT * FROM posts")
 	if err != nil {
@@ -40,7 +39,7 @@ func GetPosts(c *gin.Context) {
 		}
 		var secretId string
 		rows.Scan(&newPost.ID, &secretId, &newPost.Text)
-		for _, token := range tokensArr {
+		for _, token := range tokens {
 			if token == secretId {
 				newPost.CanUserModify = true
 			}
@@ -67,19 +66,19 @@ func AddPost(c *gin.Context) {
 }
 
 func EditPost(c *gin.Context) {
-	tokens, _ := c.Get("tokens")
+	tokens := c.GetStringSlice("tokens")
 	var editedPost PostFromUser
 	if err := c.BindJSON(&editedPost); err != nil {
 		c.Status(http.StatusBadRequest)
 		return
 	}
-	tokensArr := tokens.([]string)
 	id := c.Param("id")
-	if len(tokensArr) == 0 || id == "" {
-		c.Status(http.StatusBadRequest)
+	if len(tokens) == 0 {
+		c.Status(http.StatusUnauthorized)
 		return
 	}
-	response, err := models.DB.Exec(`UPDATE posts SET text=$1 WHERE id=$2 AND secret_id = ANY($3)`, editedPost.Text, id, pq.Array(tokensArr))
+
+	response, err := models.DB.Exec(`UPDATE posts SET text=$1 WHERE id=$2 AND secret_id = ANY($3)`, editedPost.Text, id, pq.Array(tokens))
 	rowsAffected, _ := response.RowsAffected()
 	if err != nil || rowsAffected == 0 {
 		c.Status(http.StatusNotFound)
@@ -89,16 +88,15 @@ func EditPost(c *gin.Context) {
 }
 
 func RemovePost(c *gin.Context) {
-	tokens, _ := c.Get("tokens")
-	tokensArr := tokens.([]string)
+	tokens := c.GetStringSlice("tokens")
 	id := c.Param("id")
 
-	if len(tokensArr) == 0 || id == "" {
+	if len(tokens) == 0 || id == "" {
 		c.Status(http.StatusBadRequest)
 		return
 	}
 
-	response, err := models.DB.Exec("DELETE FROM posts WHERE id=$1 AND secret_id = ANY($2)", id, pq.Array(tokensArr))
+	response, err := models.DB.Exec("DELETE FROM posts WHERE id=$1 AND secret_id = ANY($2)", id, pq.Array(tokens))
 	rowsAffected, _ := response.RowsAffected()
 	if err != nil || rowsAffected == 0 {
 		c.Status(http.StatusNotFound)
