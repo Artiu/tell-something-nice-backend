@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -28,8 +29,12 @@ type AddPostReturn struct {
 func GetPosts(c *gin.Context) {
 	var posts []ReturnPost
 	tokens := c.GetStringSlice("tokens")
-
-	rows, err := models.DB.Query("SELECT * FROM posts")
+	limit, _ := strconv.Atoi(c.Query("limit"))
+	if limit < 20 {
+		limit = 20
+	}
+	offset := limit - 20
+	rows, err := models.DB.Query("SELECT * FROM posts ORDER BY id DESC LIMIT $1 OFFSET $2", limit, offset)
 	if err != nil {
 		panic(err)
 	}
